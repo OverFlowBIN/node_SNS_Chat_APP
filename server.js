@@ -17,6 +17,16 @@ app.use("/public", express.static("public"));
 const methodOverride = require("method-override");
 app.use(methodOverride("_method"));
 
+// npm install passport passport-local express-session
+const passport = require("passport");
+const LocalStrategy = require("passport-local").Strategy;
+const session = require("express-session");
+app.use(
+  session({ secret: "비밀코드", resave: true, saveUninitialized: false })
+);
+app.use(passport.initialize());
+app.use(passport.session());
+
 const PORT = 8080;
 
 // $ npm install mongodb@3.6.4
@@ -116,9 +126,8 @@ app.get("/edit/:id", (req, res) => {
   db.collection("post").findOne(
     { _id: parseInt(req.params.id) },
     (err, data) => {
-      console.log("data", data);
-      if (!data) console.log("Not found");
-      else res.render("edit.ejs", { post: data });
+      console.log("GET edit");
+      res.render("edit.ejs", { post: data });
     }
   );
 });
@@ -133,6 +142,83 @@ app.put("/edit", (req, res) => {
     { $set: { title, date } },
     (err, data) => {
       console.log("Complete update");
+      res.redirect("/list");
     }
   );
 });
+
+// Login page "GET"
+app.get("/login", (req, res) => {
+  res.render("login.ejs");
+});
+
+// Login "POST"
+// passport.authenticate('local'[, option]) => Local 방식으로 회원인지를 인증함.
+app.post(
+  "/login",
+  passport.authenticate("local", {
+    failureRedirect: "/fail",
+  }),
+  (req, res) => {
+    res.redirect("/");
+  }
+);
+
+app.get("/fail", (req, res) => {
+  res.render("fail.ejs");
+});
+
+// 로그인 여부 파악 함수
+function loggin(req, res, next) {
+  if (req.user) next();
+  else res.send("로그인이 필요합니다.");
+}
+
+// My-page "GET"
+app.get("/mypage", loggin, (req, res) => {
+  // console.log(req.user);
+  res.render("mypage.ejs", { user: req.user });
+});
+
+// 인증 방식 세부 코드 작성해야됨
+// passport를 이용하여 아이디/비번 검증하기. => 이후 세션정보를 만들어줘야함.
+passport.use(
+  new LocalStrategy(
+    {
+      usernameField: "id",
+      passwordField: "pw",
+      session: true, // 로그인 후 세션 저장 여부
+      passReqToCallback: false, // id,pw 외의 다른 정보 검증 여부
+    },
+    function (inputID, inputPW, done) {
+      //console.log(inputID, inputPW);
+      db.collection("login").findOne({ id: inputID }, function (err, data) {
+        if (err) return done(err);
+        // done(서버에러, 성공시 사용자 DB data, message)
+        if (!data)
+          return done(null, false, { message: "존재하지않는 아이디요" });
+        if (inputPW == data.pw) {
+          return done(null, data);
+        } else {
+          return done(null, false, { message: "비번틀렸어요" });
+        }
+      });
+    }
+  )
+);
+
+// session 만들기
+passport.serializeUser((user, done) => {
+  done(null, user.id); // 보통 id값만을 이용하여 session data를 만든다
+});
+
+// session을 찾을 때 실행되는 함수
+// 유저 정보는 id만 있는 상태이다(위에서 그렇게 만듬)
+// DB에서 id를 이용하여 추가 정보를 갖고와야 한다.
+passport.deserializeUser((id, done) => {
+  db.collection("login").findOne({ id }, (err, data) => {
+    done(null, data);
+  });
+});
+
+// 회원 가입 추가하기(비밀번호 암호화 해서 저장)

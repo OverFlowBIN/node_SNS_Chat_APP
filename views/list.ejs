@@ -87,6 +87,19 @@
             console.log(xhr, testStatus, errorThrown);
           });
       });
+
+      // 해당 게시물 제목 클릭시 상세페이지 나오기
+      $(".edit").click(function (e) {
+        let postNum = e.target.dataset.id;
+        $.ajax({
+          method: "GET",
+          url: `/edit/${postNum}`,
+        })
+          .done((data) => {
+            console.log(postNum);
+          })
+          .fail();
+      });
     </script>
 
     <!-- Optional JavaScript -->
@@ -103,15 +116,3 @@
     ></script>
   </body>
 </html>
-
-<!-- // 해당 게시물 제목 클릭시 상세페이지 나오기
-      $(".title").click(function (e) {
-        let postNum = e.target.dataset.id;
-        $.ajax({
-          method: "GET",
-          url: "/detail",
-          data: postNum,
-        })
-          .done((data) => {})
-          .fail();
-      }); -->
