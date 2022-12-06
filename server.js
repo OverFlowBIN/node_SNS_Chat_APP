@@ -1,5 +1,6 @@
 const express = require("express");
 const app = express();
+require("dotenv").config();
 
 // body-parser는 input안에 적힌 내용을 해석하는 기능을 한다.
 const bodyParser = require("body-parser");
@@ -27,7 +28,7 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-const PORT = 8080;
+const PORT = process.env.PORT || 8080;
 
 // $ npm install mongodb@3.6.4
 const MongoClient = require("mongodb").MongoClient;
@@ -35,7 +36,8 @@ const MongoClient = require("mongodb").MongoClient;
 // Connect MongoDB
 let db;
 MongoClient.connect(
-  "mongodb+srv://admin:admin1234@nodeapp.pdaand0.mongodb.net/?retryWrites=true&w=majority",
+  process.env.DB_URL +
+    "@nodeapp.pdaand0.mongodb.net/?retryWrites=true&w=majority",
   (err, client) => {
     if (err) return console.log(err);
 

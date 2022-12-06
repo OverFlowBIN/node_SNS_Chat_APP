@@ -32,7 +32,13 @@
         <% for (let i = 0; i < posts.length; i++) { %>
         <li class="list-group-item">
           <p>글 번호 : <%= posts[i]._id %></p>
-          <h4 class="title">할일 제목 : <%= posts[i].title %></h4>
+
+          <h4 class="title" herf="/detail">
+            <a href="/detail/<%= posts[i]._id %>">
+              할일 제목 : <%= posts[i].title %>
+            </a>
+          </h4>
+
           <p>마감 날짜 : <%= posts[i].date %></p>
           <!-- HTML form tag를 이용해도 Delete 요청은 따로 할 수 없다 => JavaScript AJAX 활용하면 된다. -->
           <!-- AJAX : 새로고침 없이 서버와 통신할 수 있는 자바스크립트 문법 -->
