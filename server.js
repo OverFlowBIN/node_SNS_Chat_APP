@@ -85,7 +85,7 @@ app.post("/add", (req, res) => {
           if (err) console.log(err);
         }
       );
-      res.send("complete data upload");
+      res.redirect("/list");
     });
   });
 });
@@ -223,4 +223,65 @@ passport.deserializeUser((id, done) => {
   });
 });
 
-// 회원 가입 추가하기(비밀번호 암호화 해서 저장)
+// TODO: 회원 가입 추가하기(비밀번호 암호화 해서 저장) //
+
+// Search "GET"
+app.get("/search", (req, res) => {
+  console.log(req.query.value);
+
+  // string 포함된 db data 찾기
+  // 1. 정규식을 이용하기 => 계시물이 많을때 오래 걸림(find는 전체를 찾음)
+  // 2. indexing을 이용함 검색하기
+  //  - 기본적으로 binary search로 이루어짐 => 어떠한 기준에 의한 정렬이 되어 있어야함
+  //  - _id같은 경우 정렬이 되어있다.
+  //  - title(string)은 정렬이 되어있지 않다 => indexing 해줘야 한다.
+  //  - mongodb atlas에서 create index 기능을 활용 할 수 있다.
+  //  - { "title": "text" } 를 추가해준다 => binary search
+  //  - text을 기준으로 하는 방식은 최근 mongodb에서 빠른 index를 미리 만들어 제공해준다(이용하면 최적화 속도를 얻을 수 있다)
+  // 만들어 둔 index를 활용한 검색 operator 구현
+  // 해당 operator는 띄어쓰기 기준으로 검색을 해준다(test에서 te를 검색한다고 나오지 않는다) => "search index 기능을 사용해야 한다"
+  //  해결책
+  //    - 1. text index를 사용하지 않고 검색할 문서의 양에 제한을 두는 방법 : 날짜를 기준(new Date())으로 최신 게시물 몇개만 검색 가능하도록 함.
+  //    - 2. text index algorithm을 변경 => mongodb atlas에는 해당 기능이 없다 => 설치해서 하는 방법이 있긴하지만 매우 어려움
+  //    - 3. search indexs 기능을 활용하기(띄어쓰기 기반이 아닌 모든 글자를 찾음, 한글의 조사 등을 제외시키는 기능을 포함 lucenen.korean)
+  // 구글에서 사용되는 방식으로 text 검색이 가능하다 (value1, value2) => value1 or value2가 포함된 data 검색
+
+  // text index를 활용한 검색
+  // db.collection("post")
+  //   .find({ $text: { $search: req.query.value } })
+  //   .toArray((err, data) => {
+  //     console.log(data);
+  //     res.render("search.ejs", { posts: data });
+  //   });
+
+  var searchConditon = [
+    {
+      $search: {
+        index: "title_search",
+        text: {
+          query: req.query.value,
+          path: "title", // title, date 둘다 찾고 싶으면 ['title', 'date']
+        },
+      },
+    },
+    // sort: _id 순서로 정렬 : -1이면 내림차순, 1이면 오름차순
+    // 만약 sort가 없으면 searchScore 기능을 이용하여 검색 결과를 정렬한다 (여러 가지 검색 점수가 있음)
+    { $sort: { _id: 1 } },
+    // limit: 10개만 검색해서 보여주기
+    { $limit: 10 },
+    // project : 챶은 data 중에 일부만 가져오거나 searchScore점수를 추가해서 가져오거나 할때 사용함
+    // { $project: { title: 1, _id: 0, score: { $meta: "searchScore" } } },
+  ];
+  console.log(req.query);
+
+  db.collection("post")
+    // 여러가지 검색조건 => aggregate paramter에 순서대로 넣으면 된다.
+    // $sort를 쓰면 결과를 정렬해서 가져옵니다. _id를 오름차순으로 정렬해주세요~ 라고 썼습니다.
+    // $limit을 쓰면 결과를 제한해줍니다. 맨위의 10개만 가져오라고 시켰습니다.
+    // $project를 쓰면 찾아온 결과 중에 원하는 항목만 보여줍니다.
+    .aggregate(searchConditon)
+    .toArray((err, data) => {
+      console.log(data);
+      res.render("search.ejs", { posts: data });
+    });
+});
