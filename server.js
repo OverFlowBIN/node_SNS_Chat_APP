@@ -30,6 +30,47 @@ app.use(passport.session());
 
 const PORT = process.env.PORT || 8080;
 
+// 인증 방식 세부 코드 작성해야됨
+// passport를 이용하여 아이디/비번 검증하기. => 이후 세션정보를 만들어줘야함.
+passport.use(
+  new LocalStrategy(
+    {
+      usernameField: "id",
+      passwordField: "pw",
+      session: true, // 로그인 후 세션 저장 여부
+      passReqToCallback: false, // id,pw 외의 다른 정보 검증 여부
+    },
+    function (inputID, inputPW, done) {
+      //console.log(inputID, inputPW);
+      db.collection("login").findOne({ id: inputID }, function (err, data) {
+        if (err) return done(err);
+        // done(서버에러, 성공시 사용자 DB data, message)
+        if (!data)
+          return done(null, false, { message: "존재하지않는 아이디요" });
+        if (inputPW == data.pw) {
+          return done(null, data);
+        } else {
+          return done(null, false, { message: "비번틀렸어요" });
+        }
+      });
+    }
+  )
+);
+
+// session 만들기
+passport.serializeUser((user, done) => {
+  done(null, user.id); // 보통 id값만을 이용하여 session data를 만든다
+});
+
+// session을 찾을 때 실행되는 함수
+// 유저 정보는 id만 있는 상태이다(위에서 그렇게 만듬)
+// DB에서 id(= serializeUser에서 user.id)를 이용하여 추가 정보를 갖고와야 한다.
+passport.deserializeUser((id, done) => {
+  db.collection("login").findOne({ id }, (err, data) => {
+    done(null, data);
+  });
+});
+
 // $ npm install mongodb@3.6.4
 const MongoClient = require("mongodb").MongoClient;
 
@@ -66,15 +107,22 @@ app.get("/write", (req, res) => {
 app.post("/add", (req, res) => {
   const { title, date } = req.body;
 
+  // TODO: session이 없을 떄 글쓰기를 누르면 서버가 멈춤 => 로그인했을때만 가능 하도록 만들기 or 익명 게시판?
+
   // counter 라는 collection을 새로 post가 post 될 때 마다 count up 시켜준다.
   // 이전 번호의 _id를 갖고 있는 post가 삭제되어도 최신 count 번호를 유지 시켜주기 떄문에 유지관리에 효과적이다.
   // 가장 최근 자료를 가져오는 query가 있긴 하지만 여기선 counter로 최신자료 번호를 관리해보기로 한다.
   db.collection("counter").findOne({ name: "numsOfPost" }, (err, data) => {
-    let recentNum = data.totalPost;
+    const recentNum = data.totalPost;
+
+    // 작성자 데이터 추가(deserializeUsere()를 통해 req.user를 사용할 수 았다.)
+    const writer = req.user._id;
+
+    const insertData = { _id: recentNum + 1, title, date, writer };
 
     // data를 저장하면 _id를 꼭 적어야 한다. 적지 않으면 강제로 _id가 부여된다.
     // 동일한 _id를 저장하면 저장되지 않는다.
-    db.collection("post").insertOne({ _id: recentNum + 1, title, date }, () => {
+    db.collection("post").insertOne(insertData, () => {
       // updateOne, updateMany
       // arguments : 수정할 데이터, 수정값, [callback]
       // 수정값 : 보통 Operator($)를 사용한다. (set, inc(dec는 음수를 사용), min rename 등등 있음)
@@ -106,8 +154,12 @@ app.get("/list", (req, res) => {
 // Delete "DELETE"
 app.delete("/delete", (req, res) => {
   req.body._id = parseInt(req.body._id);
-  db.collection("post").deleteOne(req.body, (err, data) => {
-    console.log("삭제완료");
+
+  // 해당 글의 작성자만 삭제 가능하도록 하기 (session 이용)
+  const deleteDate = { _id: req.body._id, writer: req.user._id };
+
+  db.collection("post").deleteOne(deleteDate, (err, data) => {
+    if (err) console.log(err);
     res.status(200).send({ message: "삭제되었습니다." }); // 200, 400에 따라 와 상관없이 Ajax .done 또는 .fail이 실행됨
   });
 });
@@ -182,47 +234,6 @@ app.get("/mypage", loggin, (req, res) => {
   res.render("mypage.ejs", { user: req.user });
 });
 
-// 인증 방식 세부 코드 작성해야됨
-// passport를 이용하여 아이디/비번 검증하기. => 이후 세션정보를 만들어줘야함.
-passport.use(
-  new LocalStrategy(
-    {
-      usernameField: "id",
-      passwordField: "pw",
-      session: true, // 로그인 후 세션 저장 여부
-      passReqToCallback: false, // id,pw 외의 다른 정보 검증 여부
-    },
-    function (inputID, inputPW, done) {
-      //console.log(inputID, inputPW);
-      db.collection("login").findOne({ id: inputID }, function (err, data) {
-        if (err) return done(err);
-        // done(서버에러, 성공시 사용자 DB data, message)
-        if (!data)
-          return done(null, false, { message: "존재하지않는 아이디요" });
-        if (inputPW == data.pw) {
-          return done(null, data);
-        } else {
-          return done(null, false, { message: "비번틀렸어요" });
-        }
-      });
-    }
-  )
-);
-
-// session 만들기
-passport.serializeUser((user, done) => {
-  done(null, user.id); // 보통 id값만을 이용하여 session data를 만든다
-});
-
-// session을 찾을 때 실행되는 함수
-// 유저 정보는 id만 있는 상태이다(위에서 그렇게 만듬)
-// DB에서 id를 이용하여 추가 정보를 갖고와야 한다.
-passport.deserializeUser((id, done) => {
-  db.collection("login").findOne({ id }, (err, data) => {
-    done(null, data);
-  });
-});
-
 // TODO: 회원 가입 추가하기(비밀번호 암호화 해서 저장) //
 
 // Search "GET"
@@ -284,4 +295,14 @@ app.get("/search", (req, res) => {
       console.log(data);
       res.render("search.ejs", { posts: data });
     });
+});
+
+app.post("/register", (req, res) => {
+  const { id, pw } = req.body;
+
+  // TODO: id unique 검사, id 유효성 검사, password 암호화
+
+  db.collection("login").insertOne({ id, pw }, (err, data) => {
+    res.redirect("/");
+  });
 });
