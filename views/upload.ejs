@@ -25,7 +25,19 @@
     <!-- 지금 파일의 상대 경로를 이용하여 html 가져오기 -->
     <%- include('nav.html') %>
 
-    <p>홈 입니다.</p>
+    <div class="mt-10">
+      <h3 class="text-center">Upload Page</h3>
+
+      <!-- enctype: 폼기능의 역할을 설정해줄 수 있다(아무것도 없어도 form 기능 수행
+      1. application/x-www-form-urlencoded : fomr 전송시 urlendcoing이된 형식으로 보낸다.(default값, base64라는 인코딩형식으로 인코딩된다. 용량 1.3배 커짐) 
+      2. multipart-formdata : encoding하지않고 파일 자체를 전송할때
+      3. text/plain : 글자를 전송할 떄
+      -->
+      <form method="POST" , action="/upload" enctype="multipart/form-data">
+        <input type="file" name="image" />
+        <button type="submit">upload</button>
+      </form>
+    </div>
 
     <!-- Optional JavaScript -->
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->

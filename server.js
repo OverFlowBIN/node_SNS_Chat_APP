@@ -18,15 +18,53 @@ app.use("/public", express.static("public"));
 const methodOverride = require("method-override");
 app.use(methodOverride("_method"));
 
+// multer
+// local에 저장하는 방식 : diskStorage,
+// RAM에 저장: 휘방성, memoryStorage
+const multer = require("multer");
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    // 저장되는 위치 설정
+    cb(null, "./public/imgs");
+  },
+  filename: function (req, file, cb) {
+    // 기존 파일 네임 그대로 이용하여 저장
+    // file.originalname는 string이기 떄문에 추가적으로 날짜, 속성 들을 붙여서 저장 할 수 있다.
+    // 하지만 뒤에 붙이면 확장자가 날라간다.
+    cb(null, file.originalname);
+  },
+  // file filter를 이용한 파일 거르는 작업
+  filefilter: function (req, file, callback) {
+    // path : node.js 기본 라이브러리
+    let ext = path.extname(file.originalname);
+    if (ext !== ".png" && ext !== ".jpg" && ext !== ".jpeg") {
+      return callback(new Error("PNG, JPG만 업로드하세요"));
+    }
+    callback(null, true);
+  },
+  limits: {
+    fileSize: 1024 * 1024,
+  },
+});
+// upload를 middle ware로 사용하면 된다.
+const upload = multer({ storage: storage });
+
 // npm install passport passport-local express-session
 const passport = require("passport");
 const LocalStrategy = require("passport-local").Strategy;
+// express-session : 세션데이터를 생성해주는 라이브러리
+// 실제 서비스에서는 express-session보다는 MongoDB에서 저장해주는 라이브러리를 이용하면 좋다.
 const session = require("express-session");
 app.use(
-  session({ secret: "비밀코드", resave: true, saveUninitialized: false })
+  session({
+    secret: "secretcode12983719",
+    resave: true,
+    saveUninitialized: false,
+  })
 );
-app.use(passport.initialize());
-app.use(passport.session());
+app.use(passport.initialize()); // passport 초기화
+app.use(passport.session()); // session 초기화
+// 특정 부분에서만 middle ware를 실행하고 싶으면 prameter에 넣고 next()를 활용한다.
 
 const PORT = process.env.PORT || 8080;
 
@@ -57,12 +95,12 @@ passport.use(
   )
 );
 
-// session 만들기
+// 로그인을 성공한 user의 정보를 session에 저장하는 함수
 passport.serializeUser((user, done) => {
   done(null, user.id); // 보통 id값만을 이용하여 session data를 만든다
 });
 
-// session을 찾을 때 실행되는 함수
+// 페이지에 방문하는 모든 clinent에 대한 정보를 req.user라는 변수에 전달해주는 함수이다.
 // 유저 정보는 id만 있는 상태이다(위에서 그렇게 만듬)
 // DB에서 id(= serializeUser에서 user.id)를 이용하여 추가 정보를 갖고와야 한다.
 passport.deserializeUser((id, done) => {
@@ -79,6 +117,7 @@ let db;
 MongoClient.connect(
   process.env.DB_URL +
     "@nodeapp.pdaand0.mongodb.net/?retryWrites=true&w=majority",
+  { useUnifiedTopology: true },
   (err, client) => {
     if (err) return console.log(err);
 
@@ -91,12 +130,9 @@ MongoClient.connect(
   }
 );
 
-// Home "GET"
-app.get("/", (req, res) => {
-  // html을 렌더리 할때는 res.sendFile('경로')
-  // ejs을 렌더리 할때는 res.sendFile('파일이름'), views 폴더에 ejs 파일을 넣어야 한다.
-  res.render("index.ejs");
-});
+const homeRoute = require("./src/routes/home");
+
+app.use("/", homeRoute);
 
 // Write "GET"
 app.get("/write", (req, res) => {
@@ -106,6 +142,8 @@ app.get("/write", (req, res) => {
 // Add(Write) "POST"
 app.post("/add", (req, res) => {
   const { title, date } = req.body;
+
+  if (!req.user) res.render("fail.ejs");
 
   // TODO: session이 없을 떄 글쓰기를 누르면 서버가 멈춤 => 로그인했을때만 가능 하도록 만들기 or 익명 게시판?
 
@@ -305,4 +343,36 @@ app.post("/register", (req, res) => {
   db.collection("login").insertOne({ id, pw }, (err, data) => {
     res.redirect("/");
   });
+});
+
+// Upload "GET" (파일 업로드)
+// 이미지는 보통 일반하드에 저장하는게 싸고 편함(MongoDB 저장 안함)
+app.get("/upload", (req, res) => {
+  res.render("upload.ejs");
+});
+
+// Upload "POST" (파일 업로드)
+// npm install multer 사용하기
+// multipart data를 쉽게 처리하기 위한 library, 전송된 파일을 저장시켜주고, 분석해준다.
+// Multer는 파일 업로드를 위해 사용되는 multipart/form-data 를 다루기 위한 node.js 의 미들웨어 입니다. 효율성을 최대화 하기 위해 busboy 를 기반으로 하고 있습니다.
+// upload.single('upload.ejs form tag input의 name속성이름') 미들웨어 넣어주기(파일 하나 올리기)
+// upload.array('input name', nums) : 여러개의 파일을 한번에 올릴 수 있다. 하지만 여러개 보낼 수 있게하는 form tag로 수정해야된다.
+app.post("/upload", upload.single("image"), (req, res) => {
+  res.send("done");
+});
+
+// 파마리머를 활용한 이미지 사진 보여주기
+app.get("/image/:imageName", (req, res) => {
+  // imageName의 확장자 까지 다 들어가야 파일을 보낼 수 있다.
+  let imageName = req.params.imageName;
+  res.sendFile(__dirname + "/public/imgs/" + imageName);
+});
+
+// MongoDB에 데이터를 넣고 뺄때 사용하는 라이브러리 2가지
+// 1. MongoDB Native Driver(예전에 필수였지만 지금은 쉬워짐)
+// 2. Mongoose => query, validation 등이 쉬워짐
+
+// 채팅/댓글 기능
+app.get("/chat", (req, res) => {
+  res.render("chat.ejs");
 });
